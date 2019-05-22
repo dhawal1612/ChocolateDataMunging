@@ -1,0 +1,3800 @@
+
+[[chocolate-database---data-munging-notebook]]
+= Chocolate Database - Data Munging Notebook
+
+[[sources-usda-food-composition-website-csv-files-twitter]]
+=== Sources: USDA Food Composition Website, CSV files, Twitter
+
+
++*In[61]:*+
+[source, ipython3]
+----
+# Importing relevant libraries
+import os
+from bs4 import BeautifulSoup
+import urllib3
+import pandas as pd
+import re
+from itertools import repeat
+import csv
+import numpy as np
+import time
+from tweepy import API
+from tweepy import Cursor
+from tweepy import TweepError
+from tweepy import OAuthHandler
+
+
+# importing Twitter API keys from file
+import t_credentials as twitter_credentials
+----
+
+[[part-i---scraping-usda-food-composition-database-website]]
+== Part I - Scraping USDA Food Composition Database Website
+
+
++*In[13]:*+
+[source, ipython3]
+----
+"""
+Input parameters for the 3 part run.
+    data_folder - mentions the folder location where data to and from is accessed
+    csvfile - name of the merged csv file containing all the parsed data
+    url_used - URL of the webite scraped
+    brands_regex - RegEx to search relevant chocolate brands
+    
+@Author: Dhawal Priyadarshi
+@Created On: Jan 2019
+"""
+
+#*********** User Input Parameters  ***********
+# Path to data folder
+# data_folder = os.getcwd() + "\\data\\"     # for Windows
+data_folder = os.getcwd() + '/data/'         # for Mac and Linux
+# File for data storage
+csvfile="chocolates_master_file.csv"
+# URL of the USDA website (chocolate lookup)
+url_used ="https://ndb.nal.usda.gov/ndb/search/list?fgcd=&manu=&lfacet=&count=&max=25&sort=default&\
+qlookup=chocolate&offset=0&format=Full&new=&measureby=&ds=&order=asc&qt=&qp=&qa=&qn=&q=&ing="
+# Brands search RegEx
+brands_regex = r"ghirardelli*|lindt*|mondelez*|mars*|hersheys*|taza*"
+#**********************************************
+
+print("Parameters are set!")
+----
+
+
++*Out[13]:*+
+----
+Parameters are set!
+----
+
+
++*In[14]:*+
+[source, ipython3]
+----
+"""
+Extracts data-rows from USDA website on even and odd positions for each page out of the 511 pages and appends 
+the data to a list, which is then written into the csv file row by row
+
+@Author: Mansi Nagraj
+@Created On: Jan 2019
+"""
+
+# Setting run variables
+filepath = data_folder + csvfile
+offset=0
+myWebData = []
+http = urllib3.PoolManager()
+urllib3.disable_warnings()     # disable SSL warnings
+
+try:
+    print("Writing file to", filepath)
+    with open(filepath, "a") as output:
+        writer = csv.writer(output, dialect='excel')
+        # Writing header for the csv file:    
+        writer.writerow(["Db","Ndb Id","FoodDescription","Manufacturer"])
+        for i in range(1,511):
+            new_url= url_used.replace(url_used[113:114] ,str(offset))
+            offset=offset+25
+            req = http.request('GET', new_url)
+            soup = BeautifulSoup(req.data, 'html.parser')
+            even_titles = soup.find_all('tr', {"class":"even"})
+            odd_titles = soup.find_all('tr', {"class":"odd"})
+            # Collecting data for even-numbered rows:        
+            for even_title in even_titles:
+                cols= even_title.find_all('td')
+                myWebData = []
+                for col in cols:
+                    row_data =col.get_text()
+                    evenRowdData= row_data.strip()
+                    myWebData.append(evenRowdData)
+                writer.writerow(myWebData)
+            # Collecting data for odd-numbered rows:             
+            for odd_title in odd_titles:
+                cols= odd_title.find_all('td')
+                myWebData = []
+                for col in cols:
+                    row_data =col.get_text()
+                    oddRowData= row_data.strip()
+                    myWebData.append(oddRowData)
+                writer.writerow(myWebData)
+        print("Scraping completed!")
+except BaseException as e:
+    print("Base Exception: %s" % str(e))
+----
+
+
++*Out[14]:*+
+----
+Writing file to /Users/dhawal/proj/Scraping/data/chocolates_master_file.csv
+Scraping completed!
+----
+
+
++*In[15]:*+
+[source, ipython3]
+----
+# Displaying the scraped dataset
+sitedf = pd.read_csv(filepath)
+sitedf
+----
+
+
++*Out[15]:*+
+----
+[cols=",,,,",options="header",]
+|=======================================================================
+| |Db |Ndb Id |FoodDescription |Manufacturer
+|0 |BF |45157421 |CHOCOLATE CHOCOLATE CHOCOLATE, DARK CHOCOLATE ...
+|Chocolate Chocolate Chocolate
+
+|1 |BF |45148721 |CHOCOLATE CHOCOLATE CHOCOLATE, WHITE CHOCOLATE...
+|Chocolate Chocolate Chocolate
+
+|2 |BF |45286717 |MILK CHOCOLATE, DARK CHOCOLATE, CARAMEL & MILK...
+|none
+
+|3 |BF |45148724 |CHOCOLATE CHOCOLATE CHOCOLATE, ALMOND TOFFEE B...
+|Chocolate Chocolate Chocolate
+
+|4 |BF |45136309 |CHOCOLATE COOKIES WITH CHOCOLATE CHIPS, UPC: 6...
+|Dad's Cookie Co.
+
+|5 |BF |45149559 |GHIRARDELLI CHOCOLATE, CHOCOLATE SQUARES, UPC:...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|6 |BF |45007105 |CHOCOLATE CORTES, SWEET CHOCOLATE, UPC: 073693...
+|Sucesores Pedro Cortes Inc.
+
+|7 |BF |45013346 |SHOPRITE, CHOCOLATE SYRUP, CHOCOLATE, UPC: 041...
+|WAKEFERN FOOD CORPORATION
+
+|8 |BF |45151749 |ELMER CHOCOLATE, ASSORTED CHOCOLATES, UPC: 041...
+|ELMER CANDY CORPORATION
+
+|9 |BF |45143245 |ELMER CHOCOLATE, ASSORTED CHOCOLATES, UPC: 041...
+|ELMER CANDY CORPORATION
+
+|10 |BF |45155648 |ELMER CHOCOLATE, CHOCOLATE, UPC: 041761100400 |ELMER
+CANDY CORPORATION
+
+|11 |BF |45100142 |DILETTANTE CHOCOLATES, DARK CHOCOLATES, UPC: 0...
+|Seattle Gourmet Foods, Inc.
+
+|12 |BF |45157408 |CHOCOLATE CHOCOLATE CHOCOLATE, MILK CHOCOLATE ...
+|Chocolate Chocolate Chocolate
+
+|13 |BF |45148722 |CHOCOLATE CHOCOLATE CHOCOLATE, DARK CHOCOLATE ...
+|Chocolate Chocolate Chocolate
+
+|14 |BF |45364413 |MILK CHOCOLATE, DARK CHOCOLATE, MILK CHOCOLATE...
+|Mars Chocolate North America LLC
+
+|15 |BF |45165180 |CHOCOLATE CHOCOLATE CHOCOLATE, CARROT CAKE, CA...
+|Chocolate Chocolate Chocolate
+
+|16 |BF |45277935 |CHOCOLATE CREME & CHOCOLATE COOKIES, UPC: 0723... |D.
+F. Stauffer Biscuit Co. Inc
+
+|17 |BF |45143244 |ELMER CHOCOLATE, ASSORTED CHOCOLATES, UPC: 041...
+|ELMER CANDY CORPORATION
+
+|18 |BF |45143243 |ELMER CHOCOLATE, ASSORTED CHOCOLATES, UPC: 041...
+|ELMER CANDY CORPORATION
+
+|19 |BF |45150158 |WHITE CHOCOLATE WITH CHOCOLATE CANDIES, UPC: 8... |G.
+Debbas Chocolatier, Inc.
+
+|20 |BF |45154454 |TEJAS CHOCOLATE, DARK CHOCOLATE, UPC: 85903700...
+|Tejas Chocolate LLC
+
+|21 |BF |45147021 |ELMER CHOCOLATE, CHOCOLATE, UPC: 041761100530 |ELMER
+CANDY CORPORATION
+
+|22 |BF |45157064 |ELMER CHOCOLATE, ASSORTED CHOCOLATE, UPC: 0417...
+|ELMER CANDY CORPORATION
+
+|23 |BF |45117943 |CHOCOLATE CORTES, GROUND CHOCOLATE, UPC: 07369...
+|Sucesores Pedro Cortes Inc.
+
+|24 |BF |45098875 |VALOR CHOCOLATES, DARK CHOCOLATE, UPC: 0722474...
+|Delta Brands Intl Corp
+
+|25 |BF |45164387 |VSC CHOCOLATES, CHOCOLATE TRUFFLES, UPC: 05541...
+|none
+
+|26 |BF |45164072 |ELMER CHOCOLATE, ASSORTED CHOCOLATES, UPC: 041...
+|ELMER CANDY CORPORATION
+
+|27 |BF |45162496 |MADELAINE CHOCOLATE COMPANY, CHOCOLATE, UPC: 0...
+|Madelaine Chocolate Novelties
+
+|28 |BF |45206369 |TAZA CHOCOLATE, CHOCOLATE BAR, UPC: 898456001081
+|TAZA CHOCOLATE
+
+|29 |SR |19081 |Candies, sweet chocolate |Sweets
+
+|... |... |... |... |...
+
+|12720 |BF |45092067 |KLONDIKE, BARS, ARTIFICIALLY FLAVORED VANILLA ...
+|The Isaly Klondike Company
+
+|12721 |BF |45284723 |VANILLA ICE CREAM WITH PEANUT BUTTER FILLED MI...
+|Big Y Foods, Inc.
+
+|12722 |BF |45166367 |THE CHEESECAKE XPRESS, CHEESECAKE SIPPI, CHEES...
+|Southern Sweet Treat's LLC
+
+|12723 |BF |45356942 |A TWIST ON OUR ORIGINAL RECIPE FEATURING RICH ...
+|United Dairy Farmers Inc
+
+|12724 |BF |45014957 |PREMIUM ICE CREAM, CARAMEL FLAVORED ICE CREAM,...
+|Topco Associates, Inc.
+
+|12725 |BF |45024887 |WHIDBEY ISLAND ICE CREAM COMPANY, 3 ULTRA PREM...
+|Whidbey Island Ice Cream LLC
+
+|12726 |BF |45340725 |HAMMOND'S, COOKIE DOUGH, HAMMOND'S COOKIE DOUG...
+|Hammond's Candies Since 1920, LLC
+
+|12727 |BF |45368979 |Quaker Chocolate Breakfast Shake (4-11.1 Fl Oz...
+|QTG
+
+|12728 |BF |45369559 |Quaker Chewy Dipps Peanut Butter Chocolate Chi...
+|QTG
+
+|12729 |SR |1102 |Milk, chocolate, fluid, commercial, whole, wit...
+|Dairy and Egg Products
+
+|12730 |SR |1306 |Ice cream, lowfat, no sugar added, cone, added...
+|Dairy and Egg Products
+
+|12731 |SR |14092 |Beverages, chocolate almond milk, unsweetened,...
+|Beverages
+
+|12732 |SR |14390 |Beverages, cocoa mix, with aspartame, powder, ...
+|Beverages
+
+|12733 |SR |14558 |Beverages, chocolate-flavor beverage mix for m...
+|Beverages
+
+|12734 |SR |18612 |Mckee Baking, Little Debbie Nutty Bars, Wafers...
+|Baked Products
+
+|12735 |SR |28297 |Cake, snack cakes, not chocolate, with icing o...
+|Baked Products
+
+|12736 |SR |19252 |Candies, REESE'S, FAST BREAK, milk chocolate p...
+|Sweets
+
+|12737 |BF |45025036 |DOUBLE RAINBOW, SUPER PREMIUM SAN FRANCISCO'S ...
+|DOUBLE RAINBOW GOURMET ICE CREAMS, INC.
+
+|12738 |BF |45375715 |COTE D'OR EXPERIENCES CHOCOLATE BAR DARK 86% 1...
+|Mondelez Int. US (0074819091009)
+
+|12739 |BF |45368434 |Quaker Breakfast Cookie Oatmeal Chocolate Chip...
+|QTG
+
+|12740 |BF |45369160 |Gamesa Surtido Sugar Wafers Strawberry, Chocol...
+|QTG
+
+|12741 |BF |45370029 |Quaker Chewy Chocolate Chip Granola Bars (24-0...
+|QTG
+
+|12742 |SR |1243 |Fat free ice cream, no sugar added, flavors ot...
+|Dairy and Egg Products
+
+|12743 |SR |8512 |Cereals, MALT-O-MEAL, chocolate, prepared with...
+|Breakfast Cereals
+
+|12744 |SR |14316 |Beverages, Malted drink mix, chocolate, with a...
+|Beverages
+
+|12745 |SR |14422 |Beverages, Dairy drink mix, chocolate, reduced...
+|Beverages
+
+|12746 |SR |16227 |Soymilk, chocolate and other flavors, light, w...
+|Legumes and Legume Products
+
+|12747 |SR |28296 |Cake, snack cakes, creme-filled, chocolate wit...
+|Baked Products
+
+|12748 |SR |19157 |Candies, MARS SNACKFOOD US, M&M's MINIs Milk C...
+|Sweets
+
+|12749 |SR |19409 |Frostings, glaze, chocolate, prepared-from-rec...
+|Sweets
+|=======================================================================
+
+12750 rows × 4 columns
+----
+
+
++*In[16]:*+
+[source, ipython3]
+----
+"""
+Subsetting the data using user-defined RegEx
+
+@Author: Dhawal Priyadarshi, Mansi Nagraj
+@Created On: Jan 2019
+"""
+
+all_match = list(map(re.search, repeat(brands_regex\
+                                       , len(sitedf['Manufacturer'])), sitedf['Manufacturer'] \
+                                       , repeat(re.IGNORECASE, len(sitedf['Manufacturer']))))
+
+s = np.bitwise_not(pd.isnull(all_match))
+sitedf_filtered = sitedf[s]
+sitedf_filtered.head(15)
+----
+
+
++*Out[16]:*+
+----
+[cols=",,,,",options="header",]
+|=======================================================================
+| |Db |Ndb Id |FoodDescription |Manufacturer
+|5 |BF |45149559 |GHIRARDELLI CHOCOLATE, CHOCOLATE SQUARES, UPC:...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|14 |BF |45364413 |MILK CHOCOLATE, DARK CHOCOLATE, MILK CHOCOLATE...
+|Mars Chocolate North America LLC
+
+|28 |BF |45206369 |TAZA CHOCOLATE, CHOCOLATE BAR, UPC: 898456001081
+|TAZA CHOCOLATE
+
+|31 |BF |45318593 |DARK CHOCOLATE CHOCOLATE CANDES, UPC: 04045805 |Mars
+Chocolate North America LLC
+
+|33 |BF |45161032 |GHIRARDELLI CHOCOLATE, CHOCOLATE, ASSORTED, UP...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|43 |BF |45318613 |CHOCOLATE CANDIES DARK CHOCOLATE, UPC: 0400004...
+|Mars Chocolate North America LLC
+
+|45 |BF |45318362 |CHOCOLATE CANDIES, DARK CHOCOLATE, UPC: 040000...
+|Mars Chocolate North America LLC
+
+|48 |BF |45166054 |GHIRARDELLI CHOCOLATE, MILK CHOCOLATE, UPC: 74...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|54 |BF |45149557 |GHIRARDELLI CHOCOLATE, SPRING IMPRESSIONS CHOC...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|58 |BF |45153637 |GHIRARDELLI CHOCOLATE, WINTER WHITE HOLIDAY SQ...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|59 |BF |45375481 |TERRY'S CHOCOLATE ORANGE CHOCOLATE BAR-BUNDLE ...
+|Mondelez EU B2B2C
+
+|60 |BF |45375882 |TERRY'S CHOCOLATE ORANGE CHOCOLATE PIECES ASSO...
+|Mondelez EU B2B2C
+
+|64 |BF |45086419 |GHIRARDELLI CHOCOLATE, MILK CHOCOLATE, UPC: 74...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|70 |BF |45048920 |GHIRARDELLI CHOCOLATE, HOLIDAY SEA SALT DUO SQ...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|72 |BF |45375749 |TERRY'S CHOCOLATE ORANGE CHOCOLATE BAR-BUNDLE ...
+|Mondelez EU B2B2C
+|=======================================================================
+----
+
+
++*In[17]:*+
+[source, ipython3]
+----
+# Randomly selecting 20 rows from the filtered data-frame
+# final_sample = sitedf_filtered.sample(20)
+
+# Using fixed Ndb IDs for the purpose of demonstration (based on the downloaded csv files in "data" folder)
+filterList = ['45318621','45145291','45318334','45053347','45148117','45376125','45375537','45318454','45369935'\
+         ,'45375781','45375900','45158103','45153224','45236273','45375862','45331173','45143068','45004850'\
+         ,'45158934','45208905']
+final_sample = sitedf_filtered[sitedf_filtered['Ndb Id'].isin(filterList)]
+final_sample
+----
+
+
++*Out[17]:*+
+----
+[cols=",,,,",options="header",]
+|=======================================================================
+| |Db |Ndb Id |FoodDescription |Manufacturer
+|1012 |BF |45318621 |CHOCOLATE CANDIES, UPC: 040000249085 |Mars
+Chocolate North America LLC
+
+|1095 |BF |45318454 |CHOCOLATE CANDIES, UPC: 040000483632 |Mars
+Chocolate North America LLC
+
+|1576 |BF |45236273 |WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+|WEIS MARKETS, INC.
+
+|2305 |BF |45331173 |MILK CHOCOLATE TRUFFLES, UPC: 009542034610 |Lindt &
+Sprungli (Schweiz) AG
+
+|3027 |BF |45158103 |SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+|Bruno's Supermarkets, Inc.
+
+|4061 |BF |45158934 |GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+|GHIRARDELLI CHOCOLATE COMPANY
+
+|4502 |BF |45148117 |KINGS, GRAHAMS, DARK CHOCOLATE, UPC: 073866104779
+|Kings Super Markets Inc
+
+|5460 |BF |45004850 |WEIS, SANDWICH KREMES, CHOCOLATE, UPC: 0414975...
+|WEIS MARKETS, INC.
+
+|5643 |BF |45053347 |DARK CHOCOLATE NON PAREILS, UPC: 041497499458 |WEIS
+MARKETS, INC.
+
+|5690 |BF |45208905 |PREMIUM MILK CHOCOLATE BAR, UPC: 086854060049
+|Ingles Markets Inc.
+
+|8232 |BF |45145291 |WILD HARVEST, CHOCOLATE CHIP COOKIES, UPC: 711...
+|Star Markets Co.
+
+|8527 |BF |45153224 |MARKETSIDE, CRISPY CHOCOLATE CHIP TOFFEE COOKI...
+|WAL-MART STORES, INC.
+
+|8918 |BF |45318334 |MILK CHOCOLATE & STRAWBERRY CREME SWIRL, UPC: ...
+|Mars Chocolate North America LLC
+
+|9978 |BF |45143068 |CHOCOLATE RAISINS WITH SEA SALT CARAMEL, UPC: ...
+|PUBLIX SUPER MARKETS, INC.
+
+|10290 |BF |45375537 |CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+|Mondelez EU B2B2C
+
+|10323 |BF |45375781 |CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+|Mondelez EU B2B2C
+
+|10366 |BF |45375900 |CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+|Mondelez EU B2B2C
+
+|11520 |BF |45369935 |NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+|Mondelez Int. US (0074819091009)
+
+|12435 |BF |45375862 |CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+|Mondelez EU B2B2C
+
+|12475 |BF |45376125 |CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+|Mondelez EU B2B2C
+|=======================================================================
+----
+
+[[part-ii---reading-data-from-csv-files]]
+== Part II - Reading data from CSV files
+
+
++*In[18]:*+
+[source, ipython3]
+----
+def NutrientFunction(fn):
+    """
+    Function to extract the Nutrient data from the different csv files and return parsed dataset
+    
+    @Author: Mansi Nagraj
+    @Created On: Jan 2019
+    """
+    rows=[]
+    inp=[]
+    filename = data_folder + str(fn)+'.csv'
+    with open(filename , newline='') as csvfile:
+        inputfile = csv.reader(csvfile)
+        for row in inputfile:
+            inp.append(row)
+        mylist=[8,11,16,17,19]
+        nutrientlist = []
+        for n in mylist:
+            nut = inp[n][:6]
+            nutrientlist.append(nut)
+        nutrientdf=pd.DataFrame(nutrientlist,columns=["Nutrient","Unit","DataPoint","StdError","Weight","Value"])
+    nutrientdf['Ndb Id']= fn
+    return nutrientdf
+
+# Gathering the parsed data from each CSV file into one dataframe
+all_results = pd.DataFrame(columns=["Nutrient","Unit","Value","Ndb Id"])
+for n in final_sample['Ndb Id']:
+    results = NutrientFunction(n)
+    all_results = all_results.append(results)
+    
+all_results.head(15)
+----
+
+
++*Out[18]:*+
+----
+/Users/dhawal/proj/Scraping/venv/lib/python3.7/site-packages/pandas/core/frame.py:6701: FutureWarning: Sorting because non-concatenation axis is not aligned. A future version
+of pandas will change to not sort by default.
+
+To accept the future behavior, pass 'sort=False'.
+
+To retain the current behavior and silence the warning, pass 'sort=True'.
+
+  sort=sort)
+
+[cols=",,,,,,,",options="header",]
+|=================================================================
+| |DataPoint |Ndb Id |Nutrient |StdError |Unit |Value |Weight
+|0 |-- |45318621 |Energy |-- |kcal |476 |200
+|1 |-- |45318621 |Carbohydrate, by difference |-- |g |73.81 |31.00
+|2 |-- |45318621 |Iron, Fe |-- |mg |0.86 |0.36
+|3 |-- |45318621 |Sodium, Na |-- |mg |71 |30
+|4 |-- |45318621 |Vitamin A, IU |-- |IU |238 |100
+|0 |-- |45318454 |Energy |-- |kcal |524 |220
+|1 |-- |45318454 |Carbohydrate, by difference |-- |g |57.14 |24.00
+|2 |-- |45318454 |Iron, Fe |-- |mg |0.86 |0.36
+|3 |-- |45318454 |Sodium, Na |-- |mg |214 |90
+|4 |-- |45318454 |Vitamin A, IU |-- |IU |238 |100
+|0 |-- |45236273 |Energy |-- |kcal |62 |149
+|1 |-- |45236273 |Carbohydrate, by difference |-- |g |10.00 |24.00
+|2 |-- |45236273 |Iron, Fe |-- |mg |0.15 |0.36
+|3 |-- |45236273 |Phosphorus, P |-- |mg |83 |199
+|4 |None |45236273 |Vitamins |None |None |None |None
+|=================================================================
+----
+
+
++*In[27]:*+
+[source, ipython3]
+----
+# Merging scraped and file based data into one dataframe
+
+# Branded Food DB
+bfdb = pd.concat([final_sample.set_index('Ndb Id'),all_results.set_index('Ndb Id')], axis=1, join='inner')
+bfdb
+----
+
+
++*Out[27]:*+
+----
+Db
+
+FoodDescription
+
+Manufacturer
+
+DataPoint
+
+Nutrient
+
+StdError
+
+Unit
+
+Value
+
+Weight
+
+Ndb Id
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Energy
+
+--
+
+kcal
+
+476
+
+200
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+73.81
+
+31.00
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+0.86
+
+0.36
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+71
+
+30
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Vitamin A, IU
+
+--
+
+IU
+
+238
+
+100
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Energy
+
+--
+
+kcal
+
+524
+
+220
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+57.14
+
+24.00
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+0.86
+
+0.36
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+214
+
+90
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Vitamin A, IU
+
+--
+
+IU
+
+238
+
+100
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+--
+
+Energy
+
+--
+
+kcal
+
+62
+
+149
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+10.00
+
+24.00
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+0.15
+
+0.36
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+--
+
+Phosphorus, P
+
+--
+
+mg
+
+83
+
+199
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+None
+
+Vitamins
+
+None
+
+None
+
+None
+
+None
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Energy
+
+--
+
+kcal
+
+611
+
+220
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+44.44
+
+16.00
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+1.00
+
+0.36
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+125
+
+45
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Vitamin C, total ascorbic acid
+
+--
+
+mg
+
+0.0
+
+0.0
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Energy
+
+--
+
+kcal
+
+500
+
+200
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+72.50
+
+29.00
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+0.90
+
+0.36
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+0
+
+0
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Vitamin C, total ascorbic acid
+
+--
+
+mg
+
+0.0
+
+0.0
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Energy
+
+--
+
+kcal
+
+523
+
+230
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+56.82
+
+25.00
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+3.27
+
+1.44
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+148
+
+65
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Vitamin C, total ascorbic acid
+
+--
+
+mg
+
+0.0
+
+0.0
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+8.80
+
+8.80
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+48.00
+
+48.00
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: MILK**, sugar, roasted HAZELNUTS,...
+
+None
+
+None
+
+None
+
+None
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+7.70
+
+7.70
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+56.00
+
+56.00
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: MILK, sugar, cocoa butter, cocoa ...
+
+None
+
+None
+
+None
+
+None
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+7.50
+
+7.50
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+56.00
+
+56.00
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: MILK**, sugar, cocoa butter, coco...
+
+None
+
+None
+
+None
+
+None
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Protein
+
+--
+
+g
+
+7.69
+
+1.00
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Fiber, total dietary
+
+--
+
+g
+
+0.0
+
+0.0
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Potassium, K
+
+--
+
+mg
+
+308
+
+40
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+538
+
+70
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Vitamin C, total ascorbic acid
+
+--
+
+mg
+
+0.0
+
+0.0
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+4.20
+
+4.20
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+69.00
+
+69.00
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: Sugar, MILK, cocoa butter, cocoa ...
+
+None
+
+None
+
+None
+
+None
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+2.40
+
+2.40
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+65.00
+
+65.00
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: Sugar, glucose syrup, palm oil, s...
+
+None
+
+None
+
+None
+
+None
+
+100 rows × 9 columns
+----
+
+[[part-iii---munging-using-twitter-api]]
+= Part III - Munging using Twitter API
+
+
++*In[29]:*+
+[source, ipython3]
+----
+"""
+Query creator for Twitter API. Creates a query column in the bfdb dataset.
+    
+@Author: Dhawal Priyadarshi
+@Created On: Jan 2019
+"""
+
+bfdb['Query'] = bfdb.apply(lambda row: row['FoodDescription'].split(",")[0], axis=1)
+bfdb
+----
+
+
++*Out[29]:*+
+----
+Db
+
+FoodDescription
+
+Manufacturer
+
+DataPoint
+
+Nutrient
+
+StdError
+
+Unit
+
+Value
+
+Weight
+
+Query
+
+Ndb Id
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Energy
+
+--
+
+kcal
+
+476
+
+200
+
+CHOCOLATE CANDIES
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+73.81
+
+31.00
+
+CHOCOLATE CANDIES
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+0.86
+
+0.36
+
+CHOCOLATE CANDIES
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+71
+
+30
+
+CHOCOLATE CANDIES
+
+45318621
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000249085
+
+Mars Chocolate North America LLC
+
+--
+
+Vitamin A, IU
+
+--
+
+IU
+
+238
+
+100
+
+CHOCOLATE CANDIES
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Energy
+
+--
+
+kcal
+
+524
+
+220
+
+CHOCOLATE CANDIES
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+57.14
+
+24.00
+
+CHOCOLATE CANDIES
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+0.86
+
+0.36
+
+CHOCOLATE CANDIES
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+214
+
+90
+
+CHOCOLATE CANDIES
+
+45318454
+
+BF
+
+CHOCOLATE CANDIES, UPC: 040000483632
+
+Mars Chocolate North America LLC
+
+--
+
+Vitamin A, IU
+
+--
+
+IU
+
+238
+
+100
+
+CHOCOLATE CANDIES
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+--
+
+Energy
+
+--
+
+kcal
+
+62
+
+149
+
+WEIS QUALITY
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+10.00
+
+24.00
+
+WEIS QUALITY
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+0.15
+
+0.36
+
+WEIS QUALITY
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+--
+
+Phosphorus, P
+
+--
+
+mg
+
+83
+
+199
+
+WEIS QUALITY
+
+45236273
+
+BF
+
+WEIS QUALITY, 1% LOW FAT CHOCOLATE MILK, CHOCO...
+
+WEIS MARKETS, INC.
+
+None
+
+Vitamins
+
+None
+
+None
+
+None
+
+None
+
+WEIS QUALITY
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Energy
+
+--
+
+kcal
+
+611
+
+220
+
+MILK CHOCOLATE TRUFFLES
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+44.44
+
+16.00
+
+MILK CHOCOLATE TRUFFLES
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+1.00
+
+0.36
+
+MILK CHOCOLATE TRUFFLES
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+125
+
+45
+
+MILK CHOCOLATE TRUFFLES
+
+45331173
+
+BF
+
+MILK CHOCOLATE TRUFFLES, UPC: 009542034610
+
+Lindt & Sprungli (Schweiz) AG
+
+--
+
+Vitamin C, total ascorbic acid
+
+--
+
+mg
+
+0.0
+
+0.0
+
+MILK CHOCOLATE TRUFFLES
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Energy
+
+--
+
+kcal
+
+500
+
+200
+
+SOUTHERN HOME
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+72.50
+
+29.00
+
+SOUTHERN HOME
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+0.90
+
+0.36
+
+SOUTHERN HOME
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+0
+
+0
+
+SOUTHERN HOME
+
+45158103
+
+BF
+
+SOUTHERN HOME, CHOCOLATE STARS, UPC: 607880038897
+
+Bruno's Supermarkets, Inc.
+
+--
+
+Vitamin C, total ascorbic acid
+
+--
+
+mg
+
+0.0
+
+0.0
+
+SOUTHERN HOME
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Energy
+
+--
+
+kcal
+
+523
+
+230
+
+GHIRARDELLI CHOCOLATE
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Carbohydrate, by difference
+
+--
+
+g
+
+56.82
+
+25.00
+
+GHIRARDELLI CHOCOLATE
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Iron, Fe
+
+--
+
+mg
+
+3.27
+
+1.44
+
+GHIRARDELLI CHOCOLATE
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+148
+
+65
+
+GHIRARDELLI CHOCOLATE
+
+45158934
+
+BF
+
+GHIRARDELLI CHOCOLATE, MINIS ASSORTMENT, UPC: ...
+
+GHIRARDELLI CHOCOLATE COMPANY
+
+--
+
+Vitamin C, total ascorbic acid
+
+--
+
+mg
+
+0.0
+
+0.0
+
+GHIRARDELLI CHOCOLATE
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+...
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+8.80
+
+8.80
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+48.00
+
+48.00
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT
+
+45375537
+
+BF
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT, UNP...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: MILK**, sugar, roasted HAZELNUTS,...
+
+None
+
+None
+
+None
+
+None
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+7.70
+
+7.70
+
+CADBURY FLAKE CHOCOLATE BAR
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+56.00
+
+56.00
+
+CADBURY FLAKE CHOCOLATE BAR
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+CADBURY FLAKE CHOCOLATE BAR
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+CADBURY FLAKE CHOCOLATE BAR
+
+45375781
+
+BF
+
+CADBURY FLAKE CHOCOLATE BAR, UNPREPARED, GTIN:...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: MILK, sugar, cocoa butter, cocoa ...
+
+None
+
+None
+
+None
+
+None
+
+CADBURY FLAKE CHOCOLATE BAR
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+7.50
+
+7.50
+
+CADBURY FREDDO CHOCOLATE BAR
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+56.00
+
+56.00
+
+CADBURY FREDDO CHOCOLATE BAR
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+CADBURY FREDDO CHOCOLATE BAR
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+CADBURY FREDDO CHOCOLATE BAR
+
+45375900
+
+BF
+
+CADBURY FREDDO CHOCOLATE BAR, UNPREPARED, GTIN...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: MILK**, sugar, cocoa butter, coco...
+
+None
+
+None
+
+None
+
+None
+
+CADBURY FREDDO CHOCOLATE BAR
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Protein
+
+--
+
+g
+
+7.69
+
+1.00
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Fiber, total dietary
+
+--
+
+g
+
+0.0
+
+0.0
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Potassium, K
+
+--
+
+mg
+
+308
+
+40
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Sodium, Na
+
+--
+
+mg
+
+538
+
+70
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ
+
+45369935
+
+BF
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ, UNPRE...
+
+Mondelez Int. US (0074819091009)
+
+--
+
+Vitamin C, total ascorbic acid
+
+--
+
+mg
+
+0.0
+
+0.0
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+4.20
+
+4.20
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+69.00
+
+69.00
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR
+
+45375862
+
+BF
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR, ...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: Sugar, MILK, cocoa butter, cocoa ...
+
+None
+
+None
+
+None
+
+None
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+--
+
+Protein
+
+--
+
+g
+
+2.40
+
+2.40
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+--
+
+Sugars, total
+
+--
+
+g
+
+65.00
+
+65.00
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+None
+
+Amino Acids
+
+None
+
+None
+
+None
+
+None
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+None
+
+Other
+
+None
+
+None
+
+None
+
+None
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR
+
+45376125
+
+BF
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR, UNPREP...
+
+Mondelez EU B2B2C
+
+None
+
+Ingredients: Sugar, glucose syrup, palm oil, s...
+
+None
+
+None
+
+None
+
+None
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR
+
+100 rows × 10 columns
+----
+
+
++*In[90]:*+
+[source, ipython3]
+----
+"""
+Twitter querying classes.
+    
+@Author: Dhawal Priyadarshi
+@Created On: Jan 2019
+@Credits: VP Russo: https://github.com/vprusso/youtube_tutorials/tree/master/twitter_python
+"""
+# # # # TWITTER AUTHENTICATOR CLASS# # # #
+class TwitterAuthenticator():
+
+    def authenticate_twitter_app(self):
+        """
+        Twitter API authenticator function
+        
+        @Author: VP Russo: https://github.com/vprusso/youtube_tutorials/tree/master/twitter_python
+        """
+        auth = OAuthHandler(twitter_credentials.CONSUMER_KEY, twitter_credentials.CONSUMER_SECRET)
+        auth.set_access_token(twitter_credentials.ACCESS_TOKEN, twitter_credentials.ACCESS_TOKEN_SECRET)
+        return auth
+
+# # # # TWEET QUERYING CLASS # # # #
+class TweetQuery():
+    """
+    This class runs search queries using Tweepy API
+    """
+    def __init__(self):
+        self.twitter_authenticator = TwitterAuthenticator()
+
+    """
+    Takes filename, query string, and optional count of number of tweets.
+    Appends the tweets to a given file name
+    
+    @Author: Dhawal Priyadarshi
+    @Credits: VPRusso: https://github.com/vprusso/youtube_tutorials/tree/master/twitter_python
+    @Credits: VickyQian: https://gist.github.com/vickyqian/f70e9ab3910c7c290d9d715491cde44c
+    """
+    def search(self, ndbid, query, count = 15):
+        auth = self.twitter_authenticator.authenticate_twitter_app()
+        api = API(auth)
+        tweet_df = pd.DataFrame(columns=['Ndb Id','Tweet_Created','Tweet_Text'])
+        try:
+            for tweet in Cursor(api.search, q = query, count = count, tweet_mode = 'extended', lang = 'en').items():
+                temp_dict = {
+                    'Ndb Id': ndbid,
+                    'Tweet_Created': tweet.created_at,
+                    'Tweet_Text': tweet.full_text
+                }
+                tweet_df = tweet_df.append(temp_dict, ignore_index=True)
+            return tweet_df
+
+        except TweepError as e:
+            print(e.response.text, "Going to sleep for 15 mins")
+            time.sleep(60 * 15)
+        return None
+    
+print("Classes defined!")
+----
+
+
++*Out[90]:*+
+----
+Classes defined!
+----
+
+
++*In[91]:*+
+[source, ipython3]
+----
+# Creating data frame for queries
+
+queries = pd.DataFrame(bfdb['Query'])
+queries = queries.drop_duplicates()
+queries
+----
+
+
++*Out[91]:*+
+----
+Query
+
+Ndb Id
+
+45318621
+
+CHOCOLATE CANDIES
+
+45236273
+
+WEIS QUALITY
+
+45331173
+
+MILK CHOCOLATE TRUFFLES
+
+45158103
+
+SOUTHERN HOME
+
+45158934
+
+GHIRARDELLI CHOCOLATE
+
+45148117
+
+KINGS
+
+45004850
+
+WEIS
+
+45053347
+
+DARK CHOCOLATE NON PAREILS
+
+45208905
+
+PREMIUM MILK CHOCOLATE BAR
+
+45145291
+
+WILD HARVEST
+
+45153224
+
+MARKETSIDE
+
+45318334
+
+MILK CHOCOLATE & STRAWBERRY CREME SWIRL
+
+45143068
+
+CHOCOLATE RAISINS WITH SEA SALT CARAMEL
+
+45375537
+
+CADBURY DAIRY MILK CHOCOLATE BAR WHOLENUT
+
+45375781
+
+CADBURY FLAKE CHOCOLATE BAR
+
+45375900
+
+CADBURY FREDDO CHOCOLATE BAR
+
+45369935
+
+NABISCO OREO CONES CHOCOLATE 1X4.750 OZ
+
+45375862
+
+CADBURY MINI EGGS CHOCOLATE EGGS MINI 328 GR
+
+45376125
+
+CADBURY CHOCOLATE BAR FUDGE 127.500 GR
+----
+
+
++*In[98]:*+
+[source, ipython3]
+----
+# Hitting the Twitter API with the query strings in the Query dataframe
+
+tweets_all = pd.DataFrame(columns=['Ndb Id','Tweet_Created','Tweet_Text'])
+max_query_count = 100       # putting a hard limit to number of requests to avoid API rate_limit error
+t_query = TweetQuery()
+for idx, val in enumerate(queries.index.values):
+    print("Iteration:", idx, val)
+    if i <= max_query_count:
+        query = queries.loc[val,'Query']     # val is the index/NDB ID
+        ndbid = val
+        tweets = t_query.search(ndbid, query, count = 10)
+        tweets_all = tweets_all.append(tweets, ignore_index=True)
+tweets_all
+----
+
+
++*Out[98]:*+
+----
+Iteration: 0 45318621
+Iteration: 1 45236273
+Iteration: 2 45331173
+Iteration: 3 45158103
+{"errors":[{"message":"Rate limit exceeded","code":88}]} Going to sleep for 15 mins
+Iteration: 4 45158934
+Iteration: 5 45148117
+{"errors":[{"message":"Rate limit exceeded","code":88}]} Going to sleep for 15 mins
+Iteration: 6 45004850
+{"errors":[{"message":"Rate limit exceeded","code":88}]} Going to sleep for 15 mins
+Iteration: 7 45053347
+Iteration: 8 45208905
+Iteration: 9 45145291
+Iteration: 10 45153224
+Iteration: 11 45318334
+Iteration: 12 45143068
+Iteration: 13 45375537
+Iteration: 14 45375781
+Iteration: 15 45375900
+Iteration: 16 45369935
+Iteration: 17 45375862
+Iteration: 18 45376125
+
+[cols=",,,",options="header",]
+|=======================================================================
+| |Ndb Id |Tweet_Created |Tweet_Text
+|0 |45318621 |2019-01-31 01:36:27 |@FoodTravelChat A6 mmm chocolate
+churro in Mal...
+
+|1 |45318621 |2019-01-31 01:08:16 |I love gummy candies! And sour stuff.
+I’m not ...
+
+|2 |45318621 |2019-01-31 00:11:43 |Can a bunch of chocolate candies with
+brandy i...
+
+|3 |45318621 |2019-01-31 00:05:12 |For those of you that don’t know,
+they are cho...
+
+|4 |45318621 |2019-01-30 23:54:46 |That concludes this month’s snacking
+adventure...
+
+|5 |45318621 |2019-01-30 22:57:29 |@mewingwang @NWF8334 @TiffaniAvatar
+give him a...
+
+|6 |45318621 |2019-01-30 21:40:52 |Have a friend coming over for
+dessert. I want ...
+
+|7 |45318621 |2019-01-30 21:28:25 |RT @AddysonSchaffer: Like if you ever
+go to a ...
+
+|8 |45318621 |2019-01-30 21:10:26 |Like if you ever go to a gas station
+&amp; you...
+
+|9 |45318621 |2019-01-30 21:10:19 |small chocolate candies are helpful
+when learn...
+
+|10 |45318621 |2019-01-30 20:57:44 |RT @JenniferOsmond3: #çarpışma They
+are #çarp...
+
+|11 |45318621 |2019-01-30 20:46:53 |RT @FairfaxCSB: 👀Look for Golden
+Tickets! To c...
+
+|12 |45318621 |2019-01-30 20:45:05 |👀Look for Golden Tickets! To
+celebrate the @Ci...
+
+|13 |45318621 |2019-01-30 20:36:37 |@JesseJackmanXXX Well, I am single.
+I can eat ...
+
+|14 |45318621 |2019-01-30 20:00:15 |Indulging in a little sugar at this
+old-fashio...
+
+|15 |45318621 |2019-01-30 17:57:43 |I'm trying to eat healthy lately.
+Yesterday I ...
+
+|16 |45318621 |2019-01-30 17:54:43 |Was expecting a dollar store candy
+from profes...
+
+|17 |45318621 |2019-01-30 17:16:19 |We have some fine sweets and tea
+items for you...
+
+|18 |45318621 |2019-01-30 16:27:24 |@VivaGlamDiva Okaaaaay! You bring
+the movie, I...
+
+|19 |45318621 |2019-01-30 16:24:00 |Low-Carb Chocolate Candies
+https://t.co/RhcRfA...
+
+|20 |45318621 |2019-01-30 16:15:58 |RT @JenniferOsmond3: #çarpışma They
+are #çarp...
+
+|21 |45318621 |2019-01-30 15:28:31 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|22 |45318621 |2019-01-30 15:28:28 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|23 |45318621 |2019-01-30 15:28:25 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|24 |45318621 |2019-01-30 15:28:21 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|25 |45318621 |2019-01-30 15:28:18 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|26 |45318621 |2019-01-30 15:28:16 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|27 |45318621 |2019-01-30 15:28:13 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|28 |45318621 |2019-01-30 15:28:10 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|29 |45318621 |2019-01-30 15:02:54 |RT @wildheartshor: can’t wait for
+valentine’s ...
+
+|... |... |... |...
+
+|1040 |45145291 |2019-01-22 02:38:34 |Sounds odd but my bucketlist fish
+is to catch ...
+
+|1041 |45145291 |2019-01-22 02:10:22 |RT @DataTrekMB: Legal marijuana
+ETF MJ (ETFMG ...
+
+|1042 |45145291 |2019-01-22 00:00:32 |Oregon's Wild Harvest Muscle Relax
+combines or...
+
+|1043 |45145291 |2019-01-21 21:46:45 |@KrAzOn89 Haha I just started
+mine. Stardew lo...
+
+|1044 |45145291 |2019-01-21 19:59:56 |4 Games that make me happy (tagged
+by @Icrediu...
+
+|1045 |45145291 |2019-01-21 17:53:42 |@SCIFIJACKRABBIT Me, I did, fond
+memories, my ...
+
+|1046 |45145291 |2019-01-21 11:41:44 |🎶If all I know of harvest, Is that
+it's worth ...
+
+|1047 |45145291 |2019-01-21 08:48:40 |Kaytee Orange Harvest Wild Bird
+Suet, 11.75 Oz...
+
+|1048 |45145291 |2019-01-21 08:35:09 |The Forager's Harvest: A Guide to
+Identifying,...
+
+|1049 |45145291 |2019-01-21 05:07:07 |@lisasharper It's an all boys
+school. The man ...
+
+|1050 |45153224 |2019-01-30 21:45:19 |I just realized I got sick after
+eating Market...
+
+|1051 |45153224 |2019-01-30 03:29:01 |I want a marketside lemonade.
+
+|1052 |45153224 |2019-01-28 22:26:27 |@DadViking It is in fact hummus...
+that is Dar...
+
+|1053 |45153224 |2019-01-28 10:13:30 |@KenDomik I had a @Walmart
+Marketside Deli med...
+
+|1054 |45153224 |2019-01-28 06:12:20 |Marketside (walmart) spinach dip
+is LIT
+
+|1055 |45153224 |2019-01-28 03:01:22 |I am 97% marketside salsa 3% woman
+
+|1056 |45153224 |2019-01-24 13:12:49 |It's my first time having this
+it's a @Walmart...
+
+|1057 |45153224 |2019-01-24 07:19:12 |So I bought some marked-down soup
+from Walmart...
+
+|1058 |45153224 |2019-01-24 01:44:07 |@Walmart Please bring back your
+Marketside bot...
+
+|1059 |45153224 |2019-01-24 01:10:24 |Really hope that @Walmart makes
+the "Marketsid...
+
+|1060 |45153224 |2019-01-22 20:16:20 |I'm pretty sure they put cool
+ranch Doritos in...
+
+|1061 |45153224 |2019-01-21 18:26:20 |@JoJo_P_87 @asda See there has
+been a quick re...
+
+|1062 |45375537 |2019-01-23 13:22:53 |Cadbury's deliciously creamy milk
+chocolate wi...
+
+|1063 |45375781 |2019-01-29 17:17:44 |In 2010 Cadbury hired British
+filmmaker Jonath...
+
+|1064 |45375781 |2019-01-29 08:40:08 |Looking to buy a bulk box of
+#CadburyFlake? ht...
+
+|1065 |45375781 |2019-01-28 14:27:26 |Paul Perkins, have you heard
+rumours that Cadb...
+
+|1066 |45375781 |2019-01-27 00:00:43 |Chocolate products that are
+greatly missed...\...
+
+|1067 |45375781 |2019-01-22 08:40:08 |Looking to buy a bulk box of
+#CadburyFlake? ht...
+
+|1068 |45375900 |2019-01-28 23:40:08 |Something to get your teeth in to
+for all love...
+
+|1069 |45375900 |2019-01-21 23:40:07 |Something to get your teeth in to
+for all love...
+|=======================================================================
+
+1070 rows × 3 columns
+----
+
+
++*In[99]:*+
+[source, ipython3]
+----
+# Storing as CSV and displaying tweets pasrsed table
+
+tweets_all.to_csv(data_folder + 'tweets_parsed.csv')
+tweets_all
+----
+
+
++*Out[99]:*+
+----
+[cols=",,,",options="header",]
+|=======================================================================
+| |Ndb Id |Tweet_Created |Tweet_Text
+|0 |45318621 |2019-01-31 01:36:27 |@FoodTravelChat A6 mmm chocolate
+churro in Mal...
+
+|1 |45318621 |2019-01-31 01:08:16 |I love gummy candies! And sour stuff.
+I’m not ...
+
+|2 |45318621 |2019-01-31 00:11:43 |Can a bunch of chocolate candies with
+brandy i...
+
+|3 |45318621 |2019-01-31 00:05:12 |For those of you that don’t know,
+they are cho...
+
+|4 |45318621 |2019-01-30 23:54:46 |That concludes this month’s snacking
+adventure...
+
+|5 |45318621 |2019-01-30 22:57:29 |@mewingwang @NWF8334 @TiffaniAvatar
+give him a...
+
+|6 |45318621 |2019-01-30 21:40:52 |Have a friend coming over for
+dessert. I want ...
+
+|7 |45318621 |2019-01-30 21:28:25 |RT @AddysonSchaffer: Like if you ever
+go to a ...
+
+|8 |45318621 |2019-01-30 21:10:26 |Like if you ever go to a gas station
+&amp; you...
+
+|9 |45318621 |2019-01-30 21:10:19 |small chocolate candies are helpful
+when learn...
+
+|10 |45318621 |2019-01-30 20:57:44 |RT @JenniferOsmond3: #çarpışma They
+are #çarp...
+
+|11 |45318621 |2019-01-30 20:46:53 |RT @FairfaxCSB: 👀Look for Golden
+Tickets! To c...
+
+|12 |45318621 |2019-01-30 20:45:05 |👀Look for Golden Tickets! To
+celebrate the @Ci...
+
+|13 |45318621 |2019-01-30 20:36:37 |@JesseJackmanXXX Well, I am single.
+I can eat ...
+
+|14 |45318621 |2019-01-30 20:00:15 |Indulging in a little sugar at this
+old-fashio...
+
+|15 |45318621 |2019-01-30 17:57:43 |I'm trying to eat healthy lately.
+Yesterday I ...
+
+|16 |45318621 |2019-01-30 17:54:43 |Was expecting a dollar store candy
+from profes...
+
+|17 |45318621 |2019-01-30 17:16:19 |We have some fine sweets and tea
+items for you...
+
+|18 |45318621 |2019-01-30 16:27:24 |@VivaGlamDiva Okaaaaay! You bring
+the movie, I...
+
+|19 |45318621 |2019-01-30 16:24:00 |Low-Carb Chocolate Candies
+https://t.co/RhcRfA...
+
+|20 |45318621 |2019-01-30 16:15:58 |RT @JenniferOsmond3: #çarpışma They
+are #çarp...
+
+|21 |45318621 |2019-01-30 15:28:31 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|22 |45318621 |2019-01-30 15:28:28 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|23 |45318621 |2019-01-30 15:28:25 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|24 |45318621 |2019-01-30 15:28:21 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|25 |45318621 |2019-01-30 15:28:18 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|26 |45318621 |2019-01-30 15:28:16 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|27 |45318621 |2019-01-30 15:28:13 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|28 |45318621 |2019-01-30 15:28:10 |Philadelphia Candies Milk Chocolate
+Covered Bu...
+
+|29 |45318621 |2019-01-30 15:02:54 |RT @wildheartshor: can’t wait for
+valentine’s ...
+
+|... |... |... |...
+
+|1040 |45145291 |2019-01-22 02:38:34 |Sounds odd but my bucketlist fish
+is to catch ...
+
+|1041 |45145291 |2019-01-22 02:10:22 |RT @DataTrekMB: Legal marijuana
+ETF MJ (ETFMG ...
+
+|1042 |45145291 |2019-01-22 00:00:32 |Oregon's Wild Harvest Muscle Relax
+combines or...
+
+|1043 |45145291 |2019-01-21 21:46:45 |@KrAzOn89 Haha I just started
+mine. Stardew lo...
+
+|1044 |45145291 |2019-01-21 19:59:56 |4 Games that make me happy (tagged
+by @Icrediu...
+
+|1045 |45145291 |2019-01-21 17:53:42 |@SCIFIJACKRABBIT Me, I did, fond
+memories, my ...
+
+|1046 |45145291 |2019-01-21 11:41:44 |🎶If all I know of harvest, Is that
+it's worth ...
+
+|1047 |45145291 |2019-01-21 08:48:40 |Kaytee Orange Harvest Wild Bird
+Suet, 11.75 Oz...
+
+|1048 |45145291 |2019-01-21 08:35:09 |The Forager's Harvest: A Guide to
+Identifying,...
+
+|1049 |45145291 |2019-01-21 05:07:07 |@lisasharper It's an all boys
+school. The man ...
+
+|1050 |45153224 |2019-01-30 21:45:19 |I just realized I got sick after
+eating Market...
+
+|1051 |45153224 |2019-01-30 03:29:01 |I want a marketside lemonade.
+
+|1052 |45153224 |2019-01-28 22:26:27 |@DadViking It is in fact hummus...
+that is Dar...
+
+|1053 |45153224 |2019-01-28 10:13:30 |@KenDomik I had a @Walmart
+Marketside Deli med...
+
+|1054 |45153224 |2019-01-28 06:12:20 |Marketside (walmart) spinach dip
+is LIT
+
+|1055 |45153224 |2019-01-28 03:01:22 |I am 97% marketside salsa 3% woman
+
+|1056 |45153224 |2019-01-24 13:12:49 |It's my first time having this
+it's a @Walmart...
+
+|1057 |45153224 |2019-01-24 07:19:12 |So I bought some marked-down soup
+from Walmart...
+
+|1058 |45153224 |2019-01-24 01:44:07 |@Walmart Please bring back your
+Marketside bot...
+
+|1059 |45153224 |2019-01-24 01:10:24 |Really hope that @Walmart makes
+the "Marketsid...
+
+|1060 |45153224 |2019-01-22 20:16:20 |I'm pretty sure they put cool
+ranch Doritos in...
+
+|1061 |45153224 |2019-01-21 18:26:20 |@JoJo_P_87 @asda See there has
+been a quick re...
+
+|1062 |45375537 |2019-01-23 13:22:53 |Cadbury's deliciously creamy milk
+chocolate wi...
+
+|1063 |45375781 |2019-01-29 17:17:44 |In 2010 Cadbury hired British
+filmmaker Jonath...
+
+|1064 |45375781 |2019-01-29 08:40:08 |Looking to buy a bulk box of
+#CadburyFlake? ht...
+
+|1065 |45375781 |2019-01-28 14:27:26 |Paul Perkins, have you heard
+rumours that Cadb...
+
+|1066 |45375781 |2019-01-27 00:00:43 |Chocolate products that are
+greatly missed...\...
+
+|1067 |45375781 |2019-01-22 08:40:08 |Looking to buy a bulk box of
+#CadburyFlake? ht...
+
+|1068 |45375900 |2019-01-28 23:40:08 |Something to get your teeth in to
+for all love...
+
+|1069 |45375900 |2019-01-21 23:40:07 |Something to get your teeth in to
+for all love...
+|=======================================================================
+
+1070 rows × 3 columns
+----

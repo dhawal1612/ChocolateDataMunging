@@ -1,0 +1,448 @@
+
+[[part-i---scraped-data-audit]]
+= Part I - Scraped Data Audit
+
+
++*In[9]:*+
+[source, ipython3]
+----
+import os
+import pandas as pd
+import csv
+----
+
+
++*In[7]:*+
+[source, ipython3]
+----
+scraped_set = pd.read_csv(os.getcwd() + '\\data\\chocolates_master_file.csv')
+scraped_set.head()
+----
+
+
++*Out[7]:*+
+----
+[cols=",,,,",options="header",]
+|=======================================================================
+| |Db |Ndb Id |FoodDescription |Manufacturer
+|0 |BF |45157421 |CHOCOLATE CHOCOLATE CHOCOLATE, DARK CHOCOLATE ...
+|Chocolate Chocolate Chocolate
+
+|1 |BF |45148721 |CHOCOLATE CHOCOLATE CHOCOLATE, WHITE CHOCOLATE...
+|Chocolate Chocolate Chocolate
+
+|2 |BF |45286717 |MILK CHOCOLATE, DARK CHOCOLATE, CARAMEL & MILK...
+|none
+
+|3 |BF |45148724 |CHOCOLATE CHOCOLATE CHOCOLATE, ALMOND TOFFEE B...
+|Chocolate Chocolate Chocolate
+
+|4 |BF |45136309 |CHOCOLATE COOKIES WITH CHOCOLATE CHIPS, UPC: 6...
+|Dad's Cookie Co.
+|=======================================================================
+----
+
+
++*In[8]:*+
+[source, ipython3]
+----
+# Full Dataset Row count
+print("Full dimension of scraped data set: ", scraped_set.shape, "\n")
+
+# Branded Chocolates Row Count
+print("Full count of branded chocolate records: ", len(scraped_set[scraped_set['Db'] == 'BF']), "\n")
+
+# Structure of attributes
+print("Dataframe structure: ", scraped_set.info(), "\n")
+
+# Checking for any null values in the data set
+print("Any null values in the data set?", scraped_set.isnull().values.any(), "\n")
+# observation: non-null in combination with Row count denotes that there are no "null" values in the dataset.
+
+# Checking for any duplicate rows in the set
+print(scraped_set[scraped_set.duplicated(keep=False)])
+----
+
+
++*Out[8]:*+
+----
+Full dimension of scraped data set:  (12750, 4) 
+
+Full count of branded chocolate records:  12526 
+
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 12750 entries, 0 to 12749
+Data columns (total 4 columns):
+Db                 12750 non-null object
+Ndb Id             12750 non-null int64
+FoodDescription    12750 non-null object
+Manufacturer       12750 non-null object
+dtypes: int64(1), object(3)
+memory usage: 398.5+ KB
+Dataframe structure:  None 
+
+Any null values in the data set? False 
+
+Empty DataFrame
+Columns: [Db, Ndb Id, FoodDescription, Manufacturer]
+Index: []
+----
+
+[[columnwise-analysis]]
+=== Columnwise Analysis
+
+
++*In[20]:*+
+[source, ipython3]
+----
+# Value of attributes
+print("Db column: \n", scraped_set['Db'].describe(), "\n")
+print("Ndb Id column: \n", scraped_set['Ndb Id'].describe(), "\n")
+print("FoodDescription column: \n", scraped_set['FoodDescription'].describe(), "\n")
+print("Manufacturer column: \n", scraped_set['Manufacturer'].describe(), "\n")
+"""
+The count and unique values show that there are no duplicate records in the Food-Description and . 
+However,there are only two unique categories of databases namely BF and SR and hence the value in the Db column justifies that.
+Similarly there are only 1749 unique manufacturers for different chocolates being considered as a part of this dataset.
+"""
+----
+
+
++*Out[20]:*+
+----
+Db column: 
+ count     12750
+unique        2
+top          BF
+freq      12526
+Name: Db, dtype: object 
+
+Ndb Id column: 
+ count    1.275000e+04
+mean     4.441237e+07
+std      5.937528e+06
+min      1.102000e+03
+25%      4.514590e+07
+50%      4.518124e+07
+75%      4.527602e+07
+max      4.537635e+07
+Name: Ndb Id, dtype: float64 
+
+FoodDescription column: 
+ count                                        12750
+unique                                       12750
+top       DARK CHOCOLATE STICKS, UPC: 017109328713
+freq                                             1
+Name: FoodDescription, dtype: object 
+
+Manufacturer column: 
+ count     12750
+unique     1749
+top        none
+freq       1714
+Name: Manufacturer, dtype: object 
+
+----
+
+[[part-ii---csv-data-audit]]
+= Part II - CSV Data Audit
+
+
++*In[11]:*+
+[source, ipython3]
+----
+def NutrientFunction(fn):
+    """
+    Function to extract the Nutrient data from the different csv files and return parsed dataset
+    
+    @Author: Mansi Nagraj
+    @Created On: Jan 2019
+    """
+
+    rows=[]
+    inp=[]
+    filename = './data/' + str(fn)+'.csv'
+    with open(filename , newline='') as csvfile:
+        inputfile = csv.reader(csvfile)
+        for row in inputfile:
+            inp.append(row)
+        mylist=[8,11,16,17,19]
+        nutrientlist = []
+        for n in mylist:
+            nut = inp[n][:6]
+            nutrientlist.append(nut)
+        nutrientdf=pd.DataFrame(nutrientlist,columns=["Nutrient","Unit","DataPoint","StdError","Weight","Value"])
+    nutrientdf['Ndb Id']= fn
+    return nutrientdf
+
+# Gathering the parsed data from each CSV file into one dataframe
+
+## selected random sample of NDB IDs
+ndbids = ['45318621','45145291','45318334','45053347','45148117','45376125','45375537','45318454','45369935'\
+         ,'45375781','45375900','45158103','45153224','45236273','45375862','45331173','45143068','45004850'\
+         ,'45158934','45208905']
+all_results = pd.DataFrame(columns=["Nutrient","Unit","Value","Ndb Id"])
+for n in ndbids:
+    results = NutrientFunction(n)
+    all_results = all_results.append(results)
+    
+all_results.head(15)
+----
+
+
++*Out[11]:*+
+----
+C:\Users\mansi\Downloads\Softwares\Python\Installation\lib\site-packages\pandas\core\frame.py:6211: FutureWarning: Sorting because non-concatenation axis is not aligned. A future version
+of pandas will change to not sort by default.
+
+To accept the future behavior, pass 'sort=False'.
+
+To retain the current behavior and silence the warning, pass 'sort=True'.
+
+  sort=sort)
+
+[cols=",,,,,,,",options="header",]
+|=================================================================
+| |DataPoint |Ndb Id |Nutrient |StdError |Unit |Value |Weight
+|0 |-- |45318621 |Energy |-- |kcal |476 |200
+|1 |-- |45318621 |Carbohydrate, by difference |-- |g |73.81 |31.00
+|2 |-- |45318621 |Iron, Fe |-- |mg |0.86 |0.36
+|3 |-- |45318621 |Sodium, Na |-- |mg |71 |30
+|4 |-- |45318621 |Vitamin A, IU |-- |IU |238 |100
+|0 |-- |45145291 |Energy |-- |kcal |464 |130
+|1 |-- |45145291 |Carbohydrate, by difference |-- |g |71.43 |20.00
+|2 |-- |45145291 |Iron, Fe |-- |mg |1.29 |0.36
+|3 |-- |45145291 |Sodium, Na |-- |mg |268 |75
+|4 |-- |45145291 |Vitamin C, total ascorbic acid |-- |mg |0.0 |0.0
+|0 |-- |45318334 |Energy |-- |kcal |548 |230
+|1 |-- |45318334 |Carbohydrate, by difference |-- |g |59.52 |25.00
+|2 |-- |45318334 |Iron, Fe |-- |mg |0.86 |0.36
+|3 |-- |45318334 |Sodium, Na |-- |mg |95 |40
+|4 |-- |45318334 |Vitamin C, total ascorbic acid |-- |mg |2.9 |1.2
+|=================================================================
+----
+
+
++*In[12]:*+
+[source, ipython3]
+----
+# Full Dataset Row count
+print("Full dimension of scraped data set: ", all_results.shape, "\n")
+
+# Structure of attributes
+print("Dataframe structure: ", all_results.info(), "\n")
+
+# Checking for any null values in the data set
+print("Any null values in the data set?", all_results.isnull().values.### Columnwise Analysisany(), "\n")
+
+# Checking for any duplicate rows in the set
+print(all_results[all_results.duplicated(keep=False)])
+      
+# Observation: As seen, there are null values present in the dataset      
+----
+
+
++*Out[12]:*+
+----
+Full dimension of scraped data set:  (100, 7) 
+
+<class 'pandas.core.frame.DataFrame'>
+Int64Index: 100 entries, 0 to 4
+Data columns (total 7 columns):
+DataPoint    83 non-null object
+Ndb Id       100 non-null object
+Nutrient     100 non-null object
+StdError     83 non-null object
+Unit         83 non-null object
+Value        83 non-null object
+Weight       83 non-null object
+dtypes: object(7)
+memory usage: 6.2+ KB
+Dataframe structure:  None 
+
+Any null values in the data set? True 
+
+Empty DataFrame
+Columns: [DataPoint, Ndb Id, Nutrient, StdError, Unit, Value, Weight]
+Index: []
+----
+
+[[columnwise-analysis]]
+=== Columnwise Analysis
+
+
++*In[13]:*+
+[source, ipython3]
+----
+# Value of attributes
+print("DataPoint column: \n", all_results['DataPoint'].describe(), "\n")
+print("Ndb Id column: \n", all_results['Ndb Id'].describe(), "\n")
+print("StdError column: \n", all_results['StdError'].describe(), "\n")
+print("Unit column: \n", all_results['Unit'].describe(), "\n")
+print("Value column: \n", all_results['Value'].describe(), "\n")
+print("Weight column: \n", all_results['Weight'].describe(), "\n")
+----
+
+
++*Out[13]:*+
+----
+DataPoint column: 
+ count     83
+unique     1
+top       --
+freq      83
+Name: DataPoint, dtype: object 
+
+Ndb Id column: 
+ count          100
+unique          20
+top       45375781
+freq             5
+Name: Ndb Id, dtype: object 
+
+StdError column: 
+ count     83
+unique     1
+top       --
+freq      83
+Name: StdError, dtype: object 
+
+Unit column: 
+ count     83
+unique     4
+top       mg
+freq      41
+Name: Unit, dtype: object 
+
+Value column: 
+ count      83
+unique     63
+top       0.0
+freq       11
+Name: Value, dtype: object 
+
+Weight column: 
+ count      83
+unique     51
+top       0.0
+freq       11
+Name: Weight, dtype: object 
+
+----
+
+[[part-iii---twitter-data-audit]]
+= Part III - Twitter Data Audit
+
+
++*In[14]:*+
+[source, ipython3]
+----
+tweets = pd.read_csv('./data/tweets_parsed.csv')
+tweets = tweets.iloc[:,1:4]
+tweets.head()
+
+----
+
+
++*Out[14]:*+
+----
+[cols=",,,",options="header",]
+|=======================================================================
+| |Ndb Id |Tweet_Created |Tweet_Text
+|0 |45318621 |2019-01-31 00:11:43 |Can a bunch of chocolate candies with
+brandy i...
+
+|1 |45318621 |2019-01-31 00:05:12 |For those of you that don’t know,
+they are cho...
+
+|2 |45318621 |2019-01-30 23:54:46 |That concludes this month’s snacking
+adventure...
+
+|3 |45318621 |2019-01-30 22:57:29 |@mewingwang @NWF8334 @TiffaniAvatar
+give him a...
+
+|4 |45318621 |2019-01-30 21:40:52 |Have a friend coming over for
+dessert. I want ...
+|=======================================================================
+----
+
+
++*In[15]:*+
+[source, ipython3]
+----
+# Full Dataset Row count
+print("Full dimension of scraped data set: ", tweets.shape, "\n")
+
+# Structure of attributes
+print("Dataframe structure: ", tweets.info(), "\n")
+
+# Checking for any null values in the data set
+print("Any null values in the data set?", tweets.isnull().values.any(), "\n")
+
+# Checking for any duplicate rows in the set
+print(tweets[tweets.duplicated(keep=False)])
+----
+
+
++*Out[15]:*+
+----
+Full dimension of scraped data set:  (1672, 3) 
+
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 1672 entries, 0 to 1671
+Data columns (total 3 columns):
+Ndb Id           1672 non-null int64
+Tweet_Created    1672 non-null object
+Tweet_Text       1672 non-null object
+dtypes: int64(1), object(2)
+memory usage: 39.3+ KB
+Dataframe structure:  None 
+
+Any null values in the data set? False 
+
+Empty DataFrame
+Columns: [Ndb Id, Tweet_Created, Tweet_Text]
+Index: []
+----
+
+
++*In[16]:*+
+[source, ipython3]
+----
+# Value of attributes
+print("Ndb Id column: \n", tweets['Ndb Id'].describe(), "\n")
+print("Tweet_Created column: \n", tweets['Tweet_Created'].describe(), "\n")
+print("Tweet_Text column: \n", tweets['Tweet_Text'].describe(), "\n")
+
+#Observation: Some tweets have been duplicated
+----
+
+
++*Out[16]:*+
+----
+Ndb Id column: 
+ count    1.672000e+03
+mean     4.521247e+07
+std      7.647919e+04
+min      4.515810e+07
+25%      4.515810e+07
+50%      4.515810e+07
+75%      4.531862e+07
+max      4.533117e+07
+Name: Ndb Id, dtype: float64 
+
+Tweet_Created column: 
+ count                    1672
+unique                   1665
+top       2019-01-29 16:59:03
+freq                        3
+Name: Tweet_Created, dtype: object 
+
+Tweet_Text column: 
+ count                                                  1672
+unique                                                 1291
+top       RT @TerranceCreamer: 1) In World War II, the r...
+freq                                                     37
+Name: Tweet_Text, dtype: object 
+
+----
